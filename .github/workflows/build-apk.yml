@@ -1,0 +1,90 @@
+name: Build CapCut Editor APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Prepare HTML
+        run: |
+          test -f "CapCut_Editor_TikTok_1080p_ClipJoin_Fix_Final.html"
+          mkdir -p www
+          cp "CapCut_Editor_TikTok_1080p_ClipJoin_Fix_Final.html" www/index.html
+
+      - name: Create Capacitor project
+        run: |
+          npm init -y
+          npm install @capacitor/core@6 @capacitor/android@6
+          npm install -D @capacitor/cli@6
+
+          cat > capacitor.config.json <<'EOF'
+          {
+            "appId": "com.capcut.editor",
+            "appName": "CapCut Editor",
+            "webDir": "www"
+          }
+          EOF
+
+      - name: Add Android
+        run: npx cap add android
+
+      - name: Install Gallery Saver Plugin
+        run: |
+          mkdir -p android/app/src/main/java/com/capcut/editor
+          cp "GallerySaverPlugin (2).java" android/app/src/main/java/com/capcut/editor/GallerySaverPlugin.java
+
+          cat > android/app/src/main/java/com/capcut/editor/MainActivity.java <<'EOF'
+          package com.capcut.editor;
+
+          import android.os.Bundle;
+          import com.getcapacitor.BridgeActivity;
+
+          public class MainActivity extends BridgeActivity {
+              @Override
+              public void onCreate(Bundle savedInstanceState) {
+                  registerPlugin(GallerySaverPlugin.class);
+                  super.onCreate(savedInstanceState);
+              }
+          }
+          EOF
+
+      - name: Sync Android
+        run: npx cap sync android
+
+      - name: Build APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: CapCut-Editor-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
